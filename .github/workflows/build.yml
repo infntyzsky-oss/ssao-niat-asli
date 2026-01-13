@@ -1,0 +1,126 @@
+name: Build SSAO Niat
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📦 Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: 🔧 Setup Android NDK r24
+      uses: nttld/setup-ndk@v1
+      with:
+        ndk-version: r24
+        local-cache: true
+
+    - name: 🚀 Run Setup Script (Auto-generate files)
+      run: |
+        echo "Running setup.sh to generate project files..."
+        chmod +x setup.sh
+        bash setup.sh
+        
+        echo ""
+        echo "Generated files:"
+        ls -la jni/ || echo "jni/ not created"
+        ls -la AML_PrecompiledLibs/ || echo "AML_PrecompiledLibs/ not found"
+
+    - name: 🔨 Build ARMPatch (if exists)
+      run: |
+        if [ -d "ARMPatch/armpatch_src" ]; then
+          echo "Building ARMPatch..."
+          ndk-build NDK_PROJECT_PATH=. \
+                    APP_BUILD_SCRIPT=./ARMPatch/armpatch_src/Android.mk \
+                    NDK_APPLICATION_MK=./ARMPatch/armpatch_src/Application.mk \
+                    NDK_DEBUG=0 \
+                    -j$(nproc) || echo "ARMPatch build failed, continuing..."
+        else
+          echo "ARMPatch not found, skipping..."
+        fi
+
+    - name: 🏗️ Build SSAO Niat Mod
+      run: |
+        echo "Building SSAO Niat..."
+        ndk-build NDK_PROJECT_PATH=. \
+                  APP_BUILD_SCRIPT=./jni/Android.mk \
+                  NDK_APPLICATION_MK=./jni/Application.mk \
+                  NDK_DEBUG=0 \
+                  V=1 \
+                  -j$(nproc)
+
+    - name: 📋 List Build Output
+      run: |
+        echo "Build artifacts:"
+        ls -lh libs/armeabi-v7a/ || echo "No build output!"
+        
+        if [ -f "libs/armeabi-v7a/libSSAO_Niat.so" ]; then
+          echo "✅ Build successful!"
+          file libs/armeabi-v7a/libSSAO_Niat.so
+        else
+          echo "❌ Build failed!"
+          exit 1
+        fi
+
+    - name: 📦 Prepare Release Package
+      run: |
+        mkdir -p release
+        cp libs/armeabi-v7a/libSSAO_Niat.so release/
+        
+        # Create installation guide
+        cat > release/INSTALL.txt << 'EOF'
+        ════════════════════════════════════════
+          SSAO Niat - Installation Guide
+        ════════════════════════════════════════
+        
+        📥 Installation:
+        1. Copy libSSAO_Niat.so to your device
+        2. Place in: /sdcard/Android/data/com.rockstargames.gtasa/mods/
+        3. Launch GTA San Andreas
+        
+        🐛 Debug:
+        adb logcat | grep SSAO_Niat
+        
+        Expected output:
+        SSAO_Niat: Mod loaded successfully!
+        SSAO_Niat: RenderScene hooked!
+        SSAO_Niat: SSAO system initialized!
+        
+        ════════════════════════════════════════
+        Build Info:
+        - Commit: ${{ github.sha }}
+        - Date: $(date)
+        - Branch: ${{ github.ref_name }}
+        ════════════════════════════════════════
+        EOF
+
+    - name: 📤 Upload Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: SSAO_Niat_Mod
+        path: release/*
+        retention-days: 90
+        if-no-files-found: error
+
+    - name: 📊 Build Summary
+      run: |
+        echo "## 🎉 Build Successful!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📦 Artifacts:" >> $GITHUB_STEP_SUMMARY
+        echo "- \`libSSAO_Niat.so\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### ℹ️ Build Info:" >> $GITHUB_STEP_SUMMARY
+        echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- Branch: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- NDK: r24" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📥 Installation:" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "adb push libSSAO_Niat.so /sdcard/Android/data/com.rockstargames.gtasa/mods/" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
