@@ -623,7 +623,6 @@ fi
 echo ""
 echo -e "${GREEN}Setup complete! Run ./build.sh to compile!${NC}"
 echo ""
-EOF
 
 chmod +x setup.sh
 
