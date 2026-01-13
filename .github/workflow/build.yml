@@ -1,0 +1,48 @@
+name: Build SSAO Niat
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup NDK
+      uses: nttld/setup-ndk@v1
+      with:
+        ndk-version: r24
+
+    - name: Run Setup Script
+      run: |
+        chmod +x setup.sh
+        bash setup.sh
+
+    - name: Build ARMPatch
+      run: |
+        if [ -d "ARMPatch/armpatch_src" ]; then
+          ndk-build NDK_PROJECT_PATH=. \
+                    APP_BUILD_SCRIPT=./ARMPatch/armpatch_src/Android.mk \
+                    NDK_APPLICATION_MK=./ARMPatch/armpatch_src/Application.mk \
+                    -j$(nproc) || true
+        fi
+
+    - name: Build Mod
+      run: |
+        ndk-build NDK_PROJECT_PATH=. \
+                  APP_BUILD_SCRIPT=./jni/Android.mk \
+                  NDK_APPLICATION_MK=./jni/Application.mk \
+                  -j$(nproc)
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: SSAO_Niat_Mod
+        path: libs/armeabi-v7a/*.so
